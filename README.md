@@ -2,7 +2,12 @@
 
 Various Kubernetes scripts
 
-### Kubernetes Registry
+## Kubernetes Registry
+
+### docker_registry
+Script to build, destroy a Docker registrt and start or stop the registry container and get registry container status
+
+
 NOTES:
 
  - need to add the secret with:
