@@ -162,23 +162,23 @@ function check_running() {
 }
 
 function _do_cmd() {
+	local _result=0
 	case $_my_verbose
 	in
 		0)	$@ > /dev/null 2>&1 ;;
 		1)	$@ ;;
 	esac
+	local _result=$?
 	echo $_echo_flag "$_my_message"
-	return $?
+	return $_result
 }
 
 function _build() {
 	_status > /dev/null 2>&1
 	if (( $? == 0 )) ; then
-		echo $_echo_flag "The registry is already running."
+		_my_message='The registry is already running.'
 		return 0
 	fi
-
-	echo $_echo_flag "Building the registry."
 	docker run -d \
 		--hostname $_registry_name \
 		--restart=always \
@@ -194,6 +194,13 @@ function _build() {
 		-e REGISTRY_HTTP_TLS_KEY=$_registry_http_tls_key \
 		-p $_my_port:$_my_port \
 		$_my_image
+	if (( $? == 0 )) ; then
+		_my_message='Registry container has been build and is running.'
+		return 0
+	else
+		_my_message='Fail to build the registry container.'
+		return 1
+	fi
 }
 
 function _destroy() {
@@ -208,47 +215,41 @@ function _destroy() {
 	_result=$(($_result + $?))
 	if (( $_result == 0 )); then
 		_my_message='Image and container deleted.'
+		return 0
 	else
-		_my_message='Unable to delete either the comtainer or image or both'
+		_my_message='Unable to delete either the container or the image or both'
+		return 1
 	fi
-	return $_result
 }
 
 function _start() {
-	local _result=0
 	_status > /dev/null 2>&1
 	if (( $? == 0 )) ; then
-		_my_message='The registry is already running.'
+		_my_message='The registry container is already running.'
 		return 0
 	fi
-
-	_my_message='Starting the registry.'
+	_my_message='Starting the registry container.'
 	docker start $_my_container
-	_result=$?
-	return $_result
+	return $?
 }
 
 function _stop() {
-	local _result=0
 	_status > /dev/null 2>&1
 	if (( $? != 0 )) ; then
-		_my_message='The registry is not running.'
+		_my_message='The registry container is not running.'
 		return 0
 	fi
-
-	_my_message='Stopping the registry.'
+	_my_message='Stopping the registry container.'
 	docker stop $_my_container
-	_result=$?
-	return $_result
+	return $?
 }
 
 function _status() {
 	local _result=0
 	docker ps | grep $_my_container
 	_result=$?
-
-	(( $_result != 0 )) && _my_message='The registry is not running.'
-	(( $_result == 0 )) && _my_message='The registry is running.'
+	(( $_result != 0 )) && _my_message='The registry container is not running.'
+	(( $_result == 0 )) && _my_message='The registry container is running.'
 	return $_result
 }
 
