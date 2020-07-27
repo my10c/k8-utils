@@ -3,10 +3,7 @@
 Various Kubernetes scripts
 
 ## Kubernetes Registry
-
-### docker_registry
-Script to build, destroy a Docker registrt and start or stop the registry container and get registry container status
-
+Script to run your own Docker images registry
 
 NOTES:
 
@@ -14,18 +11,17 @@ NOTES:
 ```
  docker secret create my.crt certs/my.crt
  docker secret create my.key certs/my.key
-```
+ ```
+  - adjust the variables to your needs, see the script variables section
 
- - adjust the variables to your need
-```
-	_registry_name			NAME OF THE REGISTERY (DNS NAME)
-	_my_port=			PORT TO USE
-	_my_data_dir=			DIRECTORY/PARTITION FOR THE DOCKER REGISTRY
-	_registry_auth_htpasswd_path=	THE AUTH FILE, SIMPLE
-	_registry_http_addr=		LISTEN ADDRESS AND PORT
-	_registry_http_tls_certificate=	CERT FOR SSL/HTTPS
-	_registry_http_tls_key=		CERT KEY FOR SSL/HTTPS
-```
+
+### docker_registry
+Script to build, destroy a Docker registry and start or stop the registry container and get registry container status
+
+### service_registry
+Script to create, destroy a registry service and get status is service exist
+*WORK IN PROGRESS*
+
 
 enjoy
 
