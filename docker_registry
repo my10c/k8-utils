@@ -75,7 +75,7 @@ _my_image=registry:2
 _my_verbose=0
 _my_message=
 
-# build variables : adjust to your need
+# script variables : adjust to your need
 _registry_name=registry.mydomain.com
 _my_port=443
 _my_data_dir="/data/docker"
