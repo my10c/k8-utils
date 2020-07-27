@@ -76,6 +76,7 @@ _my_verbose=0
 _my_message=
 
 # build variables : adjust to your need
+_registry_name=registry.mydomain.com
 _my_port=443
 _my_data_dir="/data/docker"
 _registry_auth_htpasswd_path="/auth/htpasswd"
@@ -179,9 +180,9 @@ function _build() {
 
 	echo $_echo_flag "Building the registry."
 	docker run -d \
-		--hostname k8-registry.suryo.com \
+		--hostname $_registry_name \
 		--restart=always \
-		--name registry \
+		--name $_my_container \
 		--mount type=bind,src=$_my_data_dir/certs,dst=/certs \
 		--mount type=bind,src=$_my_data_dir/registry,dst=/var/lib/registry \
 		--mount type=bind,src=$_my_data_dir/auth,dst=/auth \
@@ -192,7 +193,7 @@ function _build() {
 		-e REGISTRY_HTTP_TLS_CERTIFICATE=$_registry_http_tls_certificate \
 		-e REGISTRY_HTTP_TLS_KEY=$_registry_http_tls_key \
 		-p $_my_port:$_my_port \
-		$_my_container:2
+		$_my_image
 }
 
 function _destroy() {
