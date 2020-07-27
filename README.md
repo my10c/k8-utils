@@ -13,6 +13,7 @@ NOTES:
 
  - adjust the variables to your need
 ```
+	_registry_name		NAME OF THE REGISTERY (DNS NAME)
 	_my_port=			PORT TO USE
 	_my_data_dir=			DIRECTORY/PARTITION FOR THE DOCKER REGISTRY
 	_registry_auth_htpasswd_path=	THE AUTH FILE, SIMPLE
