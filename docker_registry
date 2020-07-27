@@ -1,0 +1,271 @@
+#!/usr/bin/env bash
+#
+# BSD 3-Clause License
+#
+# Copyright (c) 2019, © Badassops LLC / Luc Suryo
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# * Neither the name of the copyright holder nor the names of its
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#*
+#* File			:	docker_registry
+#*
+#* Description	:	Startup script for Docker Registry
+#*
+#* Author	:	Luc Suryo <luc@badassops.com>
+#*
+#* Version	:	0.1
+#*
+#* Date		:	Jul 26, 2020
+#*
+#* History	:
+#* 		Date:			Author:				Info:
+#*		Jul 26, 2020	LIS					First Release to public
+#*
+
+_program="${0##*/}"
+_author='Luc Suryo'
+_copyright="Copyright 2020 - $(date "+%Y") (c) Badassops LLC"
+_license='License BSD, http://www.freebsd.org/copyright/freebsd-license.html'
+_version='0.1'
+_email='luc@badassops.com'
+_summary='Startup script for Docker Registry'
+_cancelled="OK : Process has been cancelled on your request."
+_info="$_program $_version\n$_copyright\n$_license\n\nWritten by $_author <$_email>\n$_summary\n"
+
+# defined return values
+_state_ok=0 ; _state_ok_msg='OK'
+_state_critical=2 ; _state_critical_msg='CRITICAL'
+
+# Whatever script needs to be run as root and exclusive lock
+_need_root=0
+_need_lock=1
+
+# working variables
+_opid=$$
+_hostname="${HOSTNAME%%.*}"
+_work_dir=/var/tmp/"$_program"
+_lockfile="$_work_dir/$_program".LOCK
+_echo_flag='-e'
+_my_cmd=
+_my_container=registry
+_my_image=registry:2
+_my_verbose=0
+_my_message=
+
+# build variables : adjust to your need
+_my_port=443
+_my_data_dir="/data/docker"
+_registry_auth_htpasswd_path="/auth/htpasswd"
+_registry_http_addr="0.0.0.0:$_my_port"
+_registry_http_tls_certificate="/certs/my.crt"
+_registry_http_tls_key="/certs/my.key"
+
+# Set interrupt handler
+trap inthandler 1 2 3 4 5 9 10 12 15 23 24 25
+
+function inthandler() {
+	clean_up
+	echo $_echo_flag "$_cancelled"
+	exit $_state_ok
+}
+
+function clean_up() {
+	rm -f "$_lockfile" > /dev/null 2>&1
+	return 0
+}
+
+function help() {
+	trap 1 2 3 4 5 9 10 12 15 23 24 25
+	echo $_echo_flag "$_info"
+	echo $_echo_flag "Usage : $_program [-h] [ option ... ]"
+	echo $_echo_flag " Options:"
+	echo $_echo_flag "	start | stop | status | build | destroy."
+	echo $_echo_flag "	-s silent."
+	echo $_echo_flag "	-v verbose."
+	echo $_echo_flag "	-h this help page."
+	echo $_echo_flag "	-V Show version."
+	echo $_echo_flag "\nNotes\n -v and -s can not be used together, default to silent."
+	clean_up
+	exit $1
+}
+
+function get_given_options() {
+	local _option_set=0
+	local _s_or_v=0
+	while [[ -n "$1" ]]
+	do
+		case "$1" in
+			'start'|'stop'|'status'|'build'|'destroy')
+								_my_cmd=_$1 ; let _option_set++ ;;
+			'-s'|'--silent')	_my_verbose=0 ; let _s_or_v++ ;;
+			'-v'|'--verbose')	_my_verbose=1 ; let _s_or_v++ ;;
+			'-V'|'--version') 	echo $_echo_flag "$_version" ; exit $_state_ok ; ;;
+			*)		help 0 ;; 	# Which includes -h and --help
+		esac
+		shift
+	done
+	(( $_option_set == 0 )) && help
+	(( $_s_or_v > 1 )) && help
+	return 0
+}
+
+function isRoot() {
+	if (($(id -u) != 0)) ; then
+		echo $_echo_flag "\n\t*** $_program: this script must be run as the user root ***\n" >&2
+		return 1
+	fi
+	return 0
+}
+
+function check_running() {
+	if [[ -f "$_lockfile" ]]; then
+		/bin/ps -p $(cat $_lockfile) > /dev/null 2>&1
+		if (( $? == 0 )) ; then
+			echo $_echo_flag "*** There is already a $_program running, execution has been terminated. ***"
+			echo $_echo_flag "*** If this is an error please remove the lock file: $_lockfile ***"
+			exit $_state_ok
+		else
+			echo $_echo_flag "*** Lock file found and deleted since there is no process with that pid ***"
+			rm -rf $_lockfile > /dev/null 2>&1
+		fi
+	fi
+	if ! mkdir -p "$_work_dir" > /dev/null 2>&1;then
+		echo $_echo_flag "*** $_state_critical_msg: Unable to create file working directory $_work_dir! ***"
+		exit $_state_unknown
+	fi
+	echo "$_opid" > "$_lockfile"
+	return 0
+}
+
+function _do_cmd() {
+	case $_my_verbose
+	in
+		0)	$@ > /dev/null 2>&1 ;;
+		1)	$@ ;;
+	esac
+	echo $_echo_flag "$_my_message"
+	return $?
+}
+
+function _build() {
+	_status > /dev/null 2>&1
+	if (( $? == 0 )) ; then
+		echo $_echo_flag "The registry is already running."
+		return 0
+	fi
+
+	echo $_echo_flag "Building the registry."
+	docker run -d \
+		--hostname k8-registry.suryo.com \
+		--restart=always \
+		--name registry \
+		--mount type=bind,src=$_my_data_dir/certs,dst=/certs \
+		--mount type=bind,src=$_my_data_dir/registry,dst=/var/lib/registry \
+		--mount type=bind,src=$_my_data_dir/auth,dst=/auth \
+		-e "REGISTRY_AUTH=htpasswd" \
+		-e "REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm" \
+		-e REGISTRY_AUTH_HTPASSWD_PATH=$_registry_auth_htpasswd_path \
+		-e REGISTRY_HTTP_ADDR=$_registry_http_addr \
+		-e REGISTRY_HTTP_TLS_CERTIFICATE=$_registry_http_tls_certificate \
+		-e REGISTRY_HTTP_TLS_KEY=$_registry_http_tls_key \
+		-p $_my_port:$_my_port \
+		$_my_container:2
+}
+
+function _destroy() {
+	local _result=0
+	_status > /dev/null 2>&1
+	if (( $? == 0 )) ; then
+		_stop
+	fi
+	docker rm --force $_my_container > /dev/null 2>&1
+	_result=$(($_result + $?))
+	docker rmi --force $_my_image > /dev/null 2>&1
+	_result=$(($_result + $?))
+	if (( $_result == 0 )); then
+		_my_message='Image and container deleted.'
+	else
+		_my_message='Unable to delete either the comtainer or image or both'
+	fi
+	return $_result
+}
+
+function _start() {
+	local _result=0
+	_status > /dev/null 2>&1
+	if (( $? == 0 )) ; then
+		_my_message='The registry is already running.'
+		return 0
+	fi
+
+	_my_message='Starting the registry.'
+	docker start $_my_container
+	_result=$?
+	return $_result
+}
+
+function _stop() {
+	local _result=0
+	_status > /dev/null 2>&1
+	if (( $? != 0 )) ; then
+		_my_message='The registry is not running.'
+		return 0
+	fi
+
+	_my_message='Stopping the registry.'
+	docker stop $_my_container
+	_result=$?
+	return $_result
+}
+
+function _status() {
+	local _result=0
+	docker ps | grep $_my_container
+	_result=$?
+
+	(( $_result != 0 )) && _my_message='The registry is not running.'
+	(( $_result == 0 )) && _my_message='The registry is running.'
+	return $_result
+}
+
+function main() {
+	local _var_exit=$_state_ok
+
+	get_given_options $@
+	if (( $_need_root == 1 )) ; then
+		 isRoot
+		(( $? != 0 )) && echo $_echo_flag "$_info" && exit 255
+	fi
+	(( $_need_lock == 1 )) && check_running
+
+	_do_cmd $_my_cmd
+	_var_exit=$?
+
+	clean_up
+	trap 1 2 3 4 5 9 10 12 15 23 24 25
+	exit $_var_exit
+}
+main $@
